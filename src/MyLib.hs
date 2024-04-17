@@ -5,8 +5,8 @@
 
 module MyLib () where
 
-import Control.Monad (liftM)
-import GHC.Show (appPrec1)
+import Control.Monad (liftM2)
+import Control.Arrow ((***))
 
 data Term a where
   Zero :: Term Int
@@ -34,7 +34,7 @@ data Type t where
   RChar :: Type Char
   RList :: forall a. Type a -> Type [a]
   RPair :: forall a b. Type a -> Type b -> Type (a, b)
-  RDyn :: forall a. Type Dynamic
+  RDyn :: Type Dynamic
 
 deriving instance Show (Type t)
 
@@ -66,8 +66,12 @@ compare' (RList _) [] _ = LT
 compare' (RList ra) (a:as) (b:bs) = if comp == EQ then compare' (RList ra) as bs else comp 
   where comp = compare' ra a b
 
+rPair :: forall a b a1 b1. (a -> a1) -> (b -> b1) -> ((a, b) -> (a1, b1))
+rPair f g (a, b) = (f a, g b)
+
 tequal :: forall t u. Type t -> Type u -> Maybe(t -> u)
 tequal RInt RInt = return id
 tequal RChar RChar = return id
 tequal (RList ra) (RList rb) = fmap <$> tequal ra rb
--- TODO: RPair
+tequal (RPair a b) (RPair a' b') = liftM2 (***) (tequal a a') (tequal b b')
+
