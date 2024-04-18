@@ -35,6 +35,7 @@ data Type t where
   RList :: forall a. Type a -> Type [a]
   RPair :: forall a b. Type a -> Type b -> Type (a, b)
   RDyn :: Type Dynamic
+  RFun :: forall a b. Type a -> Type b -> Type (a -> b)
 
 deriving instance Show (Type t)
 
@@ -69,9 +70,16 @@ compare' (RList ra) (a:as) (b:bs) = if comp == EQ then compare' (RList ra) as bs
 rPair :: forall a b a1 b1. (a -> a1) -> (b -> b1) -> ((a, b) -> (a1, b1))
 rPair f g (a, b) = (f a, g b)
 
+rFunc :: forall a b a1 b1. (a -> a1) -> (b -> b1) -> ((a -> b) -> (a1 -> b1))
+rFunc f g h = undefined
+
 tequal :: forall t u. Type t -> Type u -> Maybe(t -> u)
 tequal RInt RInt = return id
 tequal RChar RChar = return id
 tequal (RList ra) (RList rb) = fmap <$> tequal ra rb
-tequal (RPair a b) (RPair a' b') = liftM2 (***) (tequal a a') (tequal b b')
+tequal (RPair a b) (RPair a' b') = (***) <$> tequal a a' <*> tequal b b'
+tequal (RFun a b) (RFun a' b') = (\convA convB f -> convB . f . convA) <$> tequal a' a <*> tequal b b'
+tequal _ _ = fail "cannot equal"
 
+cast :: forall t. Dynamic -> Type t -> Maybe t
+cast (Dyn ra a) t = fmap (\f -> f a) (tequal ra t) 
