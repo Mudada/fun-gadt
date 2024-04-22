@@ -27,7 +27,10 @@ eval (If e1 e2 e3) = if eval e1 then eval e2 else eval e3
 -- >>> eval (If (IsZero (Pred Zero)) (Pred Zero) (Succ Zero))
 -- 1
 
-
+type Name = String
+type Age = Int
+data Person = Person Name Age
+  deriving (Show)
 
 data Type t where
   RInt :: Type Int
@@ -36,6 +39,7 @@ data Type t where
   RPair :: forall a b. Type a -> Type b -> Type (a, b)
   RDyn :: Type Dynamic
   RFun :: forall a b. Type a -> Type b -> Type (a -> b)
+  RPerson :: Type Person
 
 deriving instance Show (Type t)
 
@@ -83,3 +87,34 @@ tequal _ _ = fail "cannot equal"
 
 cast :: forall t. Dynamic -> Type t -> Maybe t
 cast (Dyn ra a) t = fmap (\f -> f a) (tequal ra t) 
+
+type Traversal = forall t. Type t -> t -> t
+
+copy :: Traversal
+copy (RInt) i = id i
+
+tick :: Name -> Traversal
+tick name RPerson (Person n a) | name == n = Person n (a + 1)
+tick _ _ t = t
+
+infixl 9 ◦
+(◦) :: Traversal -> Traversal -> Traversal
+(f ◦ g) rt = f rt . g rt
+
+-- ( Type t -> t -> t ) -> ( Type t -> t -> t ) 
+imap :: Traversal -> Traversal
+imap _ RInt i = i
+imap _ RChar c = c
+imap _ (RList _) [] = []
+imap f (RList ra) (a:as) = f ra a : f (RList ra) as
+imap f (RPair ra rb) (a, b) = (f ra a, f rb b)
+imap f RPerson (Person n a) = Person (f rString n) (f RInt a)
+
+-- Main> let ps = [Person "Norma" 50,Person "Richard" 59]
+-- Main> everywhere (tick "Richard") (RList RPerson) ps 
+-- [Person "Norma" 50,Person "Richard" 60]
+
+everywhere, everywhere' :: Traversal -> Traversal
+everywhere f = f ◦ imap (everywhere f)
+everywhere' f = imap (everywhere' f) ◦ f
+
