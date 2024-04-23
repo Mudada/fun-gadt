@@ -5,8 +5,8 @@
 
 module MyLib () where
 
-import Control.Monad (liftM2)
 import Control.Arrow ((***))
+import GHC.Float (expts10)
 
 data Term a where
   Zero :: Term Int
@@ -91,7 +91,7 @@ cast (Dyn ra a) t = fmap (\f -> f a) (tequal ra t)
 type Traversal = forall t. Type t -> t -> t
 
 copy :: Traversal
-copy (RInt) i = id i
+copy _ = id
 
 tick :: Name -> Traversal
 tick name RPerson (Person n a) | name == n = Person n (a + 1)
@@ -101,7 +101,6 @@ infixl 9 ◦
 (◦) :: Traversal -> Traversal -> Traversal
 (f ◦ g) rt = f rt . g rt
 
--- ( Type t -> t -> t ) -> ( Type t -> t -> t ) 
 imap :: Traversal -> Traversal
 imap _ RInt i = i
 imap _ RChar c = c
@@ -118,3 +117,31 @@ everywhere, everywhere' :: Traversal -> Traversal
 everywhere f = f ◦ imap (everywhere f)
 everywhere' f = imap (everywhere' f) ◦ f
 
+type Query x = forall t. Type t -> t -> x
+
+isum :: Query Int -> Query Int
+isum _ RInt _ = 0
+isum _ RChar _ = 0
+isum _ (RList _) [] = 0
+isum f (RList ra) (a:as) = f ra a + f (RList ra) as
+isum f (RPair ra rb) (a, b) = f ra a + f rb b
+isum f RPerson (Person n a) = f rString n + f RInt a
+
+total :: Query Int -> Query Int
+total f rt t = f rt t + isum (total f) rt t
+
+age :: forall t. Type t -> t -> Age
+age (RPerson) (Person n a) = a
+age _ _ = 0
+
+sizeof :: Query Int
+sizeof RInt _ = 2
+sizeof RChar _ = 2
+sizeof (RList _) [] = 0
+sizeof (RList _) (_:_) = 3
+sizeof (RPair _ _) _ = 3
+sizeof RPerson _ = 3
+
+icrush, everything :: forall x. (x -> x -> x) -> x -> Query x -> Query x
+icrush f x q ra a = f (q ra a) x
+everything f x q ra a = everything f (icrush f x q ra a) q ra a
